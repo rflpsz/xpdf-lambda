@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  xpdf
+
+  Sample SAM Template for xpdf
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+  Api:
+    BinaryMediaTypes:
+      - "*~1*"
+
+Resources:
+
+  XpdfBinLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: xpdf
+      Description: A layer that contains the xpdf binaries
+      ContentUri: "./layers/xpdf"
+      CompatibleRuntimes:
+        - python3.9
+      LicenseInfo: 'MIT'
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: makefile
+
+  RestApiXpdf:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Name: xpdf-api
+      Auth:
+        ApiKeyRequired: true
+
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: XpdfApiKey
+      Enabled: true
+
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties: 
+      ApiStages: 
+        - ApiId: !Ref RestApiXpdf
+          Stage: !Ref RestApiXpdfProdStage
+
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan
+
+  XpdfS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'xpdf-temp'
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'DeleteTemporaryImages'
+            Status: 'Enabled'
+            ExpirationInDays: 1
+            Prefix: 'pdf_images/'
+
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'S3AccessPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:ListBucket'
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${XpdfS3Bucket}'
+                  - !Sub 'arn:aws:s3:::${XpdfS3Bucket}/*'
+              - Effect: 'Allow'
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 
+                  - 'arn:aws:logs:*:*:*'
+
+  XpdfGetImagesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: XpdfGetImagesFunction
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Layers:
+       - !Ref XpdfBinLayer
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref XpdfS3Bucket
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        GetImages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApiXpdf
+            Path: /get-images
+            Method: post
+            Auth: 
+              ApiKeyRequired: true
