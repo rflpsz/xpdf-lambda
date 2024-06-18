@@ -25,7 +25,7 @@ def lambda_handler(event, context):
             command = f"pdfimages -j {temp_pdf_path} {temp_image_dir}/image"
             subprocess.run(command, shell=True, check=True)
 
-            images = [f for f in os.listdir(temp_image_dir) if f.lower().endswith(('.pbm', '.jpeg'))]
+            images = [f for f in os.listdir(temp_image_dir)]
 
             image_urls = []
             for image_file in images:
