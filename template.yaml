@@ -59,7 +59,7 @@ Resources:
   XpdfS3Bucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      BucketName: 'xpdf-temp'
+      BucketName: 'xpdf-temp-rafael'
       LifecycleConfiguration:
         Rules:
           - Id: 'DeleteTemporaryImages'
